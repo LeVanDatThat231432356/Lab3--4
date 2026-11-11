@@ -1,0 +1,294 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Giám sát bể nuôi thủy sản</title>
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    font-family: Arial;
+    background: #eef2f7;
+    margin: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #1565c0;
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+.cards {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    flex: 1;
+    min-width: 200px;
+    text-align: center;
+    box-shadow: 0 2px 8px #ccc;
+}
+
+.value {
+    font-size: 30px;
+    font-weight: bold;
+    color: #1565c0;
+}
+
+.chart {
+    background: white;
+    padding: 20px;
+    margin-top: 20px;
+    border-radius: 12px;
+}
+
+button {
+    padding: 12px;
+    margin: 5px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: white;
+}
+
+.auto { background: #1565c0; }
+.manual { background: #616161; }
+.on { background: #2e7d32; }
+.off { background: #c62828; }
+
+#connection {
+    text-align: center;
+    font-weight: bold;
+    margin: 15px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>GIÁM SÁT BỂ NUÔI THỦY SẢN</h1>
+
+<div id="connection">Đang kết nối MQTT...</div>
+
+<div class="cards">
+
+    <div class="card">
+        <h3>Mực nước</h3>
+        <div class="value" id="water">-- m</div>
+    </div>
+
+    <div class="card">
+        <h3>Nhiệt độ nước</h3>
+        <div class="value" id="temperature">-- °C</div>
+    </div>
+
+    <div class="card">
+        <h3>Chế độ</h3>
+        <div class="value" id="mode">--</div>
+    </div>
+
+</div>
+
+<div class="chart">
+    <h3>Biểu đồ mực nước</h3>
+    <canvas id="waterChart"></canvas>
+</div>
+
+<div class="chart">
+    <h3>Biểu đồ nhiệt độ</h3>
+    <canvas id="tempChart"></canvas>
+</div>
+
+<div class="chart">
+    <h3>Điều khiển hệ thống</h3>
+
+    <button class="auto" onclick="sendCommand('auto')">
+        AUTO
+    </button>
+
+    <button class="manual" onclick="sendCommand('manual')">
+        MANUAL
+    </button>
+
+    <hr>
+
+    <button class="on" onclick="sendCommand('bom_on')">
+        BẬT BƠM
+    </button>
+
+    <button class="off" onclick="sendCommand('bom_off')">
+        TẮT BƠM
+    </button>
+
+    <button class="on" onclick="sendCommand('van_on')">
+        MỞ VAN
+    </button>
+
+    <button class="off" onclick="sendCommand('van_off')">
+        ĐÓNG VAN
+    </button>
+
+    <p id="pump">Bơm: --</p>
+    <p id="valve">Van: --</p>
+</div>
+
+</div>
+
+<script>
+
+// ================= MQTT =================
+const broker =
+    "wss://broker.emqx.io:8084/mqtt";
+
+const topicData =
+    "aquaculture/data";
+
+const topicCommand =
+    "aquaculture/command";
+
+const topicStatus =
+    "aquaculture/status";
+
+const client = mqtt.connect(broker);
+
+// ================= CHART =================
+const labels = [];
+
+const waterValues = [];
+const tempValues = [];
+
+const waterChart = new Chart(
+    document.getElementById("waterChart"),
+    {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Mực nước (m)",
+                data: waterValues,
+                borderColor: "blue",
+                tension: 0.2
+            }]
+        }
+    }
+);
+
+const tempChart = new Chart(
+    document.getElementById("tempChart"),
+    {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Nhiệt độ (°C)",
+                data: tempValues,
+                borderColor: "red",
+                tension: 0.2
+            }]
+        }
+    }
+);
+
+// ================= CONNECT =================
+client.on("connect", function() {
+
+    document.getElementById("connection")
+        .innerText = "MQTT: Đã kết nối";
+
+    client.subscribe(topicData);
+    client.subscribe(topicStatus);
+});
+
+// ================= RECEIVE DATA =================
+client.on("message", function(topic, message) {
+
+    const data = JSON.parse(message.toString());
+
+    // DATA SENSOR
+    if (topic === topicData) {
+
+        if (data.water_level >= 0) {
+
+            // cm -> m
+            const water =
+                data.water_level / 100;
+
+            document.getElementById("water")
+                .innerText = water.toFixed(2) + " m";
+
+            document.getElementById("temperature")
+                .innerText =
+                data.temperature.toFixed(2) + " °C";
+
+            const time =
+                new Date().toLocaleTimeString();
+
+            labels.push(time);
+            waterValues.push(water);
+            tempValues.push(data.temperature);
+
+            // Giới hạn 20 điểm
+            if (labels.length > 20) {
+                labels.shift();
+                waterValues.shift();
+                tempValues.shift();
+            }
+
+            waterChart.update();
+            tempChart.update();
+        }
+    }
+
+    // SYSTEM STATUS
+    if (topic === topicStatus) {
+
+        document.getElementById("mode")
+            .innerText = data.mode;
+
+        document.getElementById("pump")
+            .innerText =
+            "Bơm: " + (data.pump ? "ON" : "OFF");
+
+        document.getElementById("valve")
+            .innerText =
+            "Van: " + (data.valve ? "OPEN" : "CLOSED");
+    }
+});
+
+// ================= SEND COMMAND =================
+function sendCommand(command) {
+
+    client.publish(topicCommand, command);
+
+}
+
+client.on("error", function(error) {
+    document.getElementById("connection")
+        .innerText = "MQTT lỗi: " + error.message;
+});
+
+client.on("offline", function() {
+    document.getElementById("connection")
+        .innerText = "MQTT: Mất kết nối";
+});
+
+</script>
+
+</body>
+</html>
