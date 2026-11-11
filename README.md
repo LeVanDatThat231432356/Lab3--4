@@ -74,16 +74,5 @@ DS18B20 ─────┘         │
 ```
 
 
-
-## 📷 System Preview
-
-<!-- Thêm ảnh chụp Wokwi hoặc Website tại đây -->
-
-![System Preview](<img width="420" height="728" alt="image" src="https://github.com/user-attachments/assets/776352e4-afe2-49f7-94a4-3dba1009c183" />
-)
-
----
-
-
 **IoT Aquaculture Monitoring System**  
 *ESP32 · FreeRTOS · MQTT · Web Application*
